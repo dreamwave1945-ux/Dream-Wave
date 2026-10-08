@@ -3,43 +3,65 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DreamWave OS // YouTube Video Visualizer</title>
+  <title>DreamWave OS // Cyber Visualizer Engine</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap');
+
     body {
       background-color: #020a0f;
       color: #00f0ff;
-      font-family: 'Courier New', Courier, monospace;
+      font-family: 'Fira Code', monospace, Courier, monospace;
     }
 
-    /* CRT SCANLINE OVERLAY */
-    body::before {
+    /* CRT SCANLINE OVERLAY EFFECT */
+    .crt-overlay::before {
       content: " ";
       display: block;
       position: fixed;
       top: 0; left: 0; bottom: 0; right: 0;
-      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
-                  linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-      z-index: 99;
-      background-size: 100% 3px, 3px 100%;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%), 
+                  linear-gradient(90deg, rgba(255, 0, 0, 0.05), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.05));
+      z-index: 90;
+      background-size: 100% 4px, 4px 100%;
       pointer-events: none;
     }
 
     .pulse-zoom {
-      transition: transform 0.05s ease-out;
+      will-change: transform;
+      transition: transform 0.04s cubic-bezier(0.1, 0.9, 0.2, 1);
     }
 
-    ::-webkit-scrollbar { width: 6px; }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: #000f19; }
-    ::-webkit-scrollbar-thumb { background: #00f0ff; }
+    ::-webkit-scrollbar-thumb { background: #00f0ff; border-radius: 3px; }
+
+    .glow-cyan { text-shadow: 0 0 10px #00f0ff; }
+    .glow-box-cyan { box-shadow: 0 0 20px rgba(0, 240, 255, 0.3); }
+    .glow-box-red { box-shadow: 0 0 20px rgba(255, 30, 60, 0.4); }
+
+    /* Custom range slider styling */
+    input[type=range] {
+      accent-color: #00f0ff;
+    }
   </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden select-none">
+<body class="h-screen flex flex-col overflow-hidden select-none crt-overlay bg-[#020a0f]">
 
   <!-- HEADER HUD -->
-  <header class="h-12 border-b-2 border-[#00f0ff] bg-[#00141e]/90 flex items-center justify-between px-5 z-50 shadow-[0_0_15px_rgba(0,240,255,0.4)]">
-    <div class="font-bold text-base tracking-widest drop-shadow-[0_0_8px_#00f0ff]">DREAMWAVE // YOUTUBE VIDEO VISUALIZER</div>
-    <div class="text-xs text-[#00ff88] animate-pulse">[ BEAT SYNC ENGINE: ACTIVE ]</div>
+  <header class="h-12 border-b-2 border-[#00f0ff]/80 bg-[#00141e]/90 flex items-center justify-between px-5 z-50 shadow-[0_0_15px_rgba(0,240,255,0.3)] backdrop-blur-md">
+    <div class="flex items-center gap-3">
+      <div class="w-3 h-3 rounded-full bg-[#00f0ff] animate-ping"></div>
+      <div class="font-bold text-sm sm:text-base tracking-widest glow-cyan">DREAMWAVE // CYBER VISUALIZER SYSTEM</div>
+    </div>
+    <div class="flex items-center gap-4 text-xs font-semibold">
+      <span id="audioModeBadge" class="hidden sm:inline px-2 py-0.5 rounded bg-[#00f0ff]/10 border border-[#00f0ff]/50 text-[#00f0ff]">MODE: BPM SYNCHRONIZER</span>
+      <div class="text-[#00ff88] animate-pulse flex items-center gap-1">
+        <span class="inline-block w-2 h-2 rounded-full bg-[#00ff88]"></span>
+        <span id="statusText">[ REALTIME FFT: IDLE ]</span>
+      </div>
+    </div>
   </header>
 
   <!-- MAIN VIEWPORT -->
@@ -54,28 +76,51 @@
     <canvas id="vizCanvas" class="absolute inset-0 w-full h-full z-10 pointer-events-none"></canvas>
 
     <!-- FLOATING CONTROL PANEL -->
-    <div class="absolute bottom-6 left-6 z-20 w-[420px] bg-[#000f19]/90 border-2 border-[#00f0ff] p-4 shadow-[0_0_25px_rgba(0,240,255,0.4)] backdrop-blur-md flex flex-col gap-3 text-xs">
-      <div class="font-bold text-[#00f0ff] border-b border-[#00f0ff]/30 pb-1 flex justify-between items-center">
-        <span>>>> VISUALIZER CONTROL PANEL</span>
-        <button onclick="togglePanel()" class="text-[#ff0055] font-bold hover:text-white">[HIDE]</button>
+    <div id="controlPanel" class="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 z-20 w-[calc(100%-2rem)] sm:w-[440px] max-h-[85vh] overflow-y-auto bg-[#000f19]/90 border-2 border-[#00f0ff] p-4 shadow-[0_0_25px_rgba(0,240,255,0.4)] backdrop-blur-md flex flex-col gap-3.5 text-xs rounded-lg transition-all duration-300">
+      
+      <div class="font-bold text-[#00f0ff] border-b border-[#00f0ff]/30 pb-2 flex justify-between items-center text-sm">
+        <span class="flex items-center gap-2">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+          SYSTEM CONTROL MATRIX
+        </span>
+        <button onclick="togglePanel()" class="text-[#ff0055] font-bold hover:text-white px-2 py-0.5 rounded border border-[#ff0055]/40 hover:bg-[#ff0055]/20">[ HIDE ]</button>
+      </div>
+
+      <!-- TAB SELECTION: YOUTUBE VS LOCAL AUDIO -->
+      <div class="grid grid-cols-2 gap-2 p-1 bg-black/60 rounded border border-[#00f0ff]/30">
+        <button id="btnTabYt" onclick="switchAudioSource('bpm')" class="py-1.5 font-bold rounded bg-[#00f0ff] text-black transition-all">YouTube + BPM Engine</button>
+        <button id="btnTabFile" onclick="switchAudioSource('fft')" class="py-1.5 font-bold rounded text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-all">Audio File FFT Data</button>
       </div>
 
       <!-- INPUT YOUTUBE LINK / ID -->
-      <div class="flex flex-col gap-1">
-        <label class="font-bold text-[#00f0ff]/80">LINK ATAU ID YOUTUBE:</label>
+      <div id="ytInputGroup" class="flex flex-col gap-1.5">
+        <label class="font-bold text-[#00f0ff]/90 flex justify-between">
+          <span>YOUTUBE VIDEO LINK / ID:</span>
+          <span class="text-[10px] text-gray-400">Embed Video Background</span>
+        </label>
         <div class="flex gap-2">
-          <input type="text" id="ytUrlInput" value="https://youtu.be/XSoh40ZpYO0" placeholder="Paste link YouTube di sini..." class="flex-1 bg-black/80 border border-[#00f0ff]/50 px-2 py-1 text-[#00f0ff] focus:outline-none font-mono">
-          <button onclick="loadYtVideo()" class="bg-[#00f0ff] text-black font-bold px-3 py-1 hover:bg-white transition-all">LOAD</button>
+          <input type="text" id="ytUrlInput" value="https://www.youtube.com/watch?v=XSoh40ZpYO0" placeholder="Paste YouTube link or Video ID..." class="flex-1 bg-black/80 border border-[#00f0ff]/50 rounded px-2.5 py-1.5 text-[#00f0ff] focus:outline-none focus:border-[#00f0ff] font-mono">
+          <button onclick="loadYtVideo()" class="bg-[#00f0ff] text-black font-bold px-3 py-1.5 rounded hover:bg-white transition-all shadow-[0_0_10px_rgba(0,240,255,0.5)]">LOAD</button>
         </div>
+      </div>
+
+      <!-- AUDIO FILE UPLOAD FOR REAL FFT SPECTRUM -->
+      <div id="fileInputGroup" class="hidden flex-col gap-1.5 bg-[#001c2e]/60 p-2.5 rounded border border-[#00f0ff]/30">
+        <label class="font-bold text-[#00ff88] flex justify-between">
+          <span>UPLOAD AUDIO FILE (MP3 / WAV):</span>
+          <span class="text-[10px] text-[#00ff88]/80">True Web Audio FFT Analyser</span>
+        </label>
+        <input type="file" id="audioFileInput" accept="audio/*" onchange="handleAudioUpload(event)" class="text-xs text-[#00f0ff] file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#00f0ff] file:text-black hover:file:bg-white cursor-pointer">
+        <audio id="localAudioPlayer" class="hidden" controls></audio>
       </div>
 
       <!-- VISUALIZER SETTINGS -->
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="font-bold text-[#00f0ff]/80 block mb-1">MODE EFEK:</label>
-          <select id="vizMode" class="w-full bg-black border border-[#00f0ff]/50 text-[#00f0ff] p-1 focus:outline-none">
-            <option value="pulse_ring">CIRCULAR PULSE RING</option>
+          <select id="vizMode" class="w-full bg-black/80 border border-[#00f0ff]/50 rounded text-[#00f0ff] p-1.5 focus:outline-none cursor-pointer">
             <option value="bars">SPECTRUM BARS</option>
+            <option value="pulse_ring">CIRCULAR PULSE RING</option>
             <option value="particles">NEON DUST PARTICLES</option>
             <option value="cyber_mask">DREAMWAVE MASK</option>
           </select>
@@ -83,7 +128,7 @@
 
         <div>
           <label class="font-bold text-[#00f0ff]/80 block mb-1">TEMA WARNA:</label>
-          <select id="vizTheme" class="w-full bg-black border border-[#00f0ff]/50 text-[#00f0ff] p-1 focus:outline-none">
+          <select id="vizTheme" class="w-full bg-black/80 border border-[#00f0ff]/50 rounded text-[#00f0ff] p-1.5 focus:outline-none cursor-pointer">
             <option value="cyan">CYBER CYAN</option>
             <option value="red">DARK ROCK RED</option>
             <option value="pink">SYNTH PINK</option>
@@ -92,53 +137,75 @@
         </div>
       </div>
 
-      <!-- DENTUMAN & SENSITIVITAS SLIDERS -->
-      <div class="grid grid-cols-2 gap-3">
+      <!-- SENSITIVITY & BEAT TAP CONTROLS -->
+      <div class="grid grid-cols-2 gap-3 border-t border-[#00f0ff]/20 pt-2">
         <div>
           <div class="flex justify-between font-bold text-[#00f0ff]/80">
-            <span>TEMPO/BPM DETAK:</span>
-            <span id="bpmVal" class="font-mono">130</span>
+            <span>BASS ZOOM INTENSITY:</span>
+            <span id="zoomVal" class="font-mono text-[#00ff88]">1.8x</span>
           </div>
-          <input type="range" id="bpmInput" min="60" max="200" value="130" oninput="updateBpm(this.value)" class="w-full accent-[#00f0ff]">
+          <input type="range" id="zoomInput" min="0" max="3.5" step="0.1" value="1.8" oninput="document.getElementById('zoomVal').innerText = this.value + 'x'" class="w-full cursor-pointer mt-1">
         </div>
 
-        <div>
+        <div id="bpmControlBlock">
           <div class="flex justify-between font-bold text-[#00f0ff]/80">
-            <span>DENTUMAN BASS ZOOM:</span>
-            <span id="zoomVal" class="font-mono">1.5x</span>
+            <span>TEMPO (BPM):</span>
+            <span id="bpmVal" class="font-mono text-[#00ff88]">128</span>
           </div>
-          <input type="range" id="zoomInput" min="0" max="3" step="0.1" value="1.5" oninput="document.getElementById('zoomVal').innerText = this.value + 'x'" class="w-full accent-[#00f0ff]">
+          <input type="range" id="bpmInput" min="60" max="200" value="128" oninput="updateBpm(this.value)" class="w-full cursor-pointer mt-1">
         </div>
       </div>
 
-      <!-- PLAY / PAUSE BUTTON -->
-      <div class="flex gap-2 pt-1 border-t border-[#00f0ff]/20">
-        <button onclick="playYtVideo()" class="flex-1 bg-[#00f0ff] text-black font-bold py-1.5 hover:bg-white transition-all text-center">PLAY VIDEO</button>
-        <button onclick="pauseYtVideo()" class="border border-[#00f0ff] text-[#00f0ff] font-bold px-4 py-1.5 hover:bg-[#00f0ff] hover:text-black transition-all">PAUSE</button>
+      <!-- BEAT TAP SYNC BUTTON -->
+      <div id="tapBlock" class="flex gap-2 items-center bg-black/40 p-2 rounded border border-[#00f0ff]/20">
+        <button onclick="handleTapBeat()" class="flex-1 bg-[#00f0ff]/20 hover:bg-[#00f0ff] text-[#00f0ff] hover:text-black font-bold py-1.5 px-3 rounded border border-[#00f0ff]/60 transition-all text-center">
+          TAP BEAT [SPACEBAR]
+        </button>
+        <span class="text-[10px] text-gray-400 max-w-[120px] leading-tight">Tekan tombol ini mengikuti ritme lagu YouTube.</span>
+      </div>
+
+      <!-- PLAY / PAUSE BUTTONS -->
+      <div class="flex gap-2 pt-2 border-t border-[#00f0ff]/20">
+        <button onclick="playAll()" class="flex-1 bg-[#00f0ff] text-black font-bold py-2 rounded hover:bg-white transition-all text-center shadow-[0_0_12px_rgba(0,240,255,0.4)]">▶ PLAY SYNC</button>
+        <button onclick="pauseAll()" class="border border-[#00f0ff] text-[#00f0ff] font-bold px-4 py-2 rounded hover:bg-[#00f0ff] hover:text-black transition-all">⏸ PAUSE</button>
       </div>
     </div>
 
     <!-- SHOW PANEL BUTTON (IF HIDDEN) -->
-    <button id="showPanelBtn" onclick="togglePanel()" class="hidden absolute bottom-6 left-6 z-20 bg-[#00f0ff] text-black font-bold px-4 py-2 border border-[#00f0ff] shadow-[0_0_15px_rgba(0,240,255,0.4)] text-xs">
+    <button id="showPanelBtn" onclick="togglePanel()" class="hidden absolute bottom-6 left-6 z-20 bg-[#00f0ff] text-black font-bold px-4 py-2 rounded border border-[#00f0ff] shadow-[0_0_15px_rgba(0,240,255,0.5)] text-xs hover:bg-white transition-all">
       [ SHOW CONTROL PANEL ]
     </button>
 
   </div>
 
-  <!-- LOAD YOUTUBE IFRAME API -->
+  <!-- YOUTUBE IFRAME API -->
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <script>
+    // System State Variables
     let player;
-    let isPlaying = false;
-    let currentBpm = 130;
+    let isYtPlaying = false;
+    let activeAudioSource = 'bpm'; // 'bpm' or 'fft'
+    
+    // Web Audio API State
+    let audioCtx = null;
+    let analyserNode = null;
+    let audioSourceNode = null;
+    let audioDataArray = null;
+    
+    // BPM Engine State
+    let currentBpm = 128;
     let pulseIntensity = 0;
+    let lastBeatTime = 0;
+    let tapTimes = [];
+    
+    // Particle Engine Array
     let particleArray = [];
 
     // --- YOUTUBE API INITIALIZATION ---
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
-        videoId: 'XSoh40ZpYO0', // Default: Dream Wave - Blooms Behind The Mask
+        videoId: 'XSoh40ZpYO0', // Default Cyberpunk / Synthwave Visual
         playerVars: {
           'autoplay': 0,
           'controls': 0,
@@ -157,16 +224,18 @@
 
     function onPlayerStateChange(event) {
       if (event.data == YT.PlayerState.PLAYING) {
-        isPlaying = true;
+        isYtPlaying = true;
+        updateStatus("YOUTUBE STREAM ACTIVE");
       } else {
-        isPlaying = false;
+        isYtPlaying = false;
+        updateStatus("PAUSED / IDLE");
       }
     }
 
     function extractVideoId(url) {
       const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
       const match = url.match(regExp);
-      return (match && match[2].length == 11) ? match[2] : url;
+      return (match && match[2].length === 11) ? match[2] : url;
     }
 
     function loadYtVideo() {
@@ -178,42 +247,141 @@
       }
     }
 
-    function playYtVideo() {
-      if (player && player.playVideo) player.playVideo();
+    // --- WEB AUDIO API FFT ANALYSER ENGINE ---
+    function initWebAudio() {
+      if (audioCtx) return;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContext();
+      analyserNode = audioCtx.createAnalyser();
+      analyserNode.fftSize = 256; // High responsiveness (128 frequency bins)
+      
+      const bufferLength = analyserNode.frequencyBinCount;
+      audioDataArray = new Uint8Array(bufferLength);
+
+      const localAudio = document.getElementById('localAudioPlayer');
+      audioSourceNode = audioCtx.createMediaElementSource(localAudio);
+      audioSourceNode.connect(analyserNode);
+      analyserNode.connect(audioCtx.destination);
     }
 
-    function pauseYtVideo() {
-      if (player && player.pauseVideo) player.pauseVideo();
+    function handleAudioUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      initWebAudio();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      const localAudio = document.getElementById('localAudioPlayer');
+      localAudio.src = URL.createObjectURL(file);
+      localAudio.play();
+
+      switchAudioSource('fft');
+      updateStatus("LOCAL FILE FFT ANALYSIS RUNNING");
     }
+
+    function switchAudioSource(mode) {
+      activeAudioSource = mode;
+      const tabYt = document.getElementById('btnTabYt');
+      const tabFile = document.getElementById('btnTabFile');
+      const fileGroup = document.getElementById('fileInputGroup');
+      const tapBlock = document.getElementById('tapBlock');
+      const bpmBlock = document.getElementById('bpmControlBlock');
+      const badge = document.getElementById('audioModeBadge');
+
+      if (mode === 'fft') {
+        tabFile.className = "py-1.5 font-bold rounded bg-[#00f0ff] text-black transition-all";
+        tabYt.className = "py-1.5 font-bold rounded text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-all";
+        fileGroup.classList.remove('hidden');
+        fileGroup.classList.add('flex');
+        tapBlock.classList.add('hidden');
+        bpmBlock.classList.add('opacity-40');
+        badge.innerText = "MODE: AUDIO FILE FFT ENGINE";
+      } else {
+        tabYt.className = "py-1.5 font-bold rounded bg-[#00f0ff] text-black transition-all";
+        tabFile.className = "py-1.5 font-bold rounded text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-all";
+        fileGroup.classList.add('hidden');
+        fileGroup.classList.remove('flex');
+        tapBlock.classList.remove('hidden');
+        bpmBlock.classList.remove('opacity-40');
+        badge.innerText = "MODE: BPM SYNCHRONIZER";
+      }
+    }
+
+    // --- BEAT TAP TEMPO ENGINE ---
+    function handleTapBeat() {
+      const now = performance.now();
+      tapTimes.push(now);
+
+      if (tapTimes.length > 4) {
+        tapTimes.shift();
+      }
+
+      if (tapTimes.length >= 2) {
+        let intervals = [];
+        for (let i = 1; i < tapTimes.length; i++) {
+          intervals.push(tapTimes[i] - tapTimes[i - 1]);
+        }
+        const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
+        const calculatedBpm = Math.round(60000 / avgInterval);
+
+        if (calculatedBpm >= 60 && calculatedBpm <= 220) {
+          updateBpm(calculatedBpm);
+          document.getElementById('bpmInput').value = calculatedBpm;
+        }
+      }
+      pulseIntensity = 1.0; // Immediate pulse feedback on tap
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+        handleTapBeat();
+      }
+    });
 
     function updateBpm(val) {
       currentBpm = parseInt(val);
       document.getElementById('bpmVal').innerText = val;
     }
 
-    function togglePanel() {
-      const panel = document.querySelector('.bg-\\[\\#000f19\\]\\/90');
-      const showBtn = document.getElementById('showPanelBtn');
-      if (panel.classList.contains('hidden')) {
-        panel.classList.remove('hidden');
-        showBtn.classList.add('hidden');
-      } else {
-        panel.classList.add('hidden');
-        showBtn.classList.remove('hidden');
+    function playAll() {
+      if (player && player.playVideo) player.playVideo();
+      const localAudio = document.getElementById('localAudioPlayer');
+      if (localAudio.src) {
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        localAudio.play();
       }
     }
 
-    // --- BEAT SYNCHRONIZATION LOOP & CANVAS RENDER ENGINE ---
-    let lastBeatTime = 0;
+    function pauseAll() {
+      if (player && player.pauseVideo) player.pauseVideo();
+      const localAudio = document.getElementById('localAudioPlayer');
+      if (localAudio.src) localAudio.pause();
+    }
 
+    function updateStatus(msg) {
+      document.getElementById('statusText').innerText = `[ ${msg} ]`;
+    }
+
+    function togglePanel() {
+      const panel = document.getElementById('controlPanel');
+      const showBtn = document.getElementById('showPanelBtn');
+      panel.classList.toggle('hidden');
+      showBtn.classList.toggle('hidden');
+    }
+
+    // --- CANVAS VISUALIZER & ANIMATION LOOP ---
     function initParticles() {
       particleArray = [];
-      for (let i = 0; i < 70; i++) {
+      for (let i = 0; i < 80; i++) {
         particleArray.push({
           x: Math.random() * window.innerWidth,
           y: Math.random() * window.innerHeight,
           size: Math.random() * 3 + 1,
-          speedY: Math.random() * 1.5 + 0.5
+          speedY: Math.random() * 1.5 + 0.5,
+          angle: Math.random() * Math.PI * 2
         });
       }
     }
@@ -222,7 +390,7 @@
       if (theme === 'red') return `rgba(255, 30, 60, ${alpha})`;
       if (theme === 'pink') return `rgba(255, 0, 170, ${alpha})`;
       if (theme === 'green') return `rgba(0, 255, 120, ${alpha})`;
-      return `rgba(0, 240, 255, ${alpha})`; // Cyan
+      return `rgba(0, 240, 255, ${alpha})`; // Default Cyan
     }
 
     function renderVisualizer(now) {
@@ -230,101 +398,147 @@
 
       const canvas = document.getElementById('vizCanvas');
       const ctx = canvas.getContext('2d');
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
 
       const mode = document.getElementById('vizMode').value;
       const theme = document.getElementById('vizTheme').value;
       const zoomFactor = parseFloat(document.getElementById('zoomInput').value);
 
-      // Hitung interval detak berdasarkan BPM
-      const beatInterval = (60 / currentBpm) * 1000;
+      let currentBassEnergy = 0;
 
-      if (isPlaying) {
-        if (now - lastBeatTime >= beatInterval) {
-          lastBeatTime = now;
-          pulseIntensity = 1.0; // Puncak detak
+      // Extract Frequency Data or Use BPM Pulse
+      if (activeAudioSource === 'fft' && analyserNode) {
+        analyserNode.getByteFrequencyData(audioDataArray);
+        
+        // Calculate Sub-Bass energy (Bands 0 - 8 ~ 20Hz - 150Hz)
+        let bassSum = 0;
+        for (let i = 0; i < 8; i++) {
+          bassSum += audioDataArray[i];
         }
+        currentBassEnergy = (bassSum / 8) / 255; // Normalized 0.0 to 1.0
+        pulseIntensity = currentBassEnergy;
+      } else {
+        // BPM Beat Synchronization Mode
+        const beatInterval = (60 / currentBpm) * 1000;
+        if (isYtPlaying) {
+          if (now - lastBeatTime >= beatInterval) {
+            lastBeatTime = now;
+            pulseIntensity = 1.0; // Peak Beat Hit
+          }
+        }
+        pulseIntensity *= 0.88; // Smooth decay
+        currentBassEnergy = pulseIntensity;
       }
 
-      // Decay efek dentuman perlahan
-      pulseIntensity *= 0.92;
-
-      // Efek Zoom/Dentuman Layar Video YouTube
+      // --- EFEK ZOOM & DENTUMAN VIDEO YOUTUBE ---
       const videoContainer = document.getElementById('videoContainer');
-      const zoomAmount = 1 + (pulseIntensity * 0.05 * zoomFactor);
+      const zoomAmount = 1 + (currentBassEnergy * 0.08 * zoomFactor);
       videoContainer.style.transform = `scale(${zoomAmount})`;
 
+      // Clear Canvas Frame
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
+      // --- RENDER VISUALIZER MODES ---
       if (mode === 'pulse_ring') {
-        const radius = 100 + (pulseIntensity * 60 * zoomFactor);
+        const baseRadius = Math.min(centerX, centerY) * 0.25;
+        const radius = baseRadius + (currentBassEnergy * 70 * zoomFactor);
+        
+        // Outer Pulsing Neon Ring
         ctx.beginPath();
         ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-        ctx.strokeStyle = getThemeColor(theme, 0.8);
-        ctx.lineWidth = 6 + (pulseIntensity * 10);
+        ctx.strokeStyle = getThemeColor(theme, 0.9);
+        ctx.lineWidth = 5 + (currentBassEnergy * 12);
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = getThemeColor(theme, 1);
         ctx.stroke();
 
-        // Inner Aura
+        // Inner Aura Glow
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius * 0.6, 0, Math.PI * 2);
-        ctx.fillStyle = getThemeColor(theme, 0.2 * pulseIntensity);
+        ctx.arc(centerX, centerY, radius * 0.65, 0, Math.PI * 2);
+        ctx.fillStyle = getThemeColor(theme, 0.25 * currentBassEnergy);
         ctx.fill();
+        ctx.shadowBlur = 0;
       }
       else if (mode === 'bars') {
-        const numBars = 32;
-        const barWidth = (canvas.width / numBars) * 0.8;
-        let x = 0;
+        const numBars = 48;
+        const barWidth = (canvas.width / numBars) * 0.7;
+        const gap = (canvas.width / numBars) * 0.3;
+
         for (let i = 0; i < numBars; i++) {
-          const h = (Math.sin(i + now * 0.005) + 1) * 60 + (pulseIntensity * 120 * zoomFactor);
-          ctx.fillStyle = getThemeColor(theme, 0.7);
-          ctx.fillRect(x, canvas.height - h, barWidth - 4, h);
-          x += (canvas.width / numBars);
+          let heightMultiplier = 0;
+          
+          if (activeAudioSource === 'fft' && audioDataArray) {
+            const dataIdx = Math.floor((i / numBars) * audioDataArray.length);
+            heightMultiplier = (audioDataArray[dataIdx] / 255);
+          } else {
+            heightMultiplier = (Math.sin(i * 0.3 + now * 0.008) + 1) * 0.3 + (currentBassEnergy * 0.7);
+          }
+
+          const h = Math.max(8, heightMultiplier * (canvas.height * 0.4) * (zoomFactor * 0.8));
+          const x = i * (barWidth + gap) + gap / 2;
+          
+          ctx.fillStyle = getThemeColor(theme, 0.85);
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = getThemeColor(theme, 0.8);
+          ctx.fillRect(x, canvas.height - h, barWidth, h);
+          ctx.shadowBlur = 0;
         }
       }
       else if (mode === 'particles') {
-        particleArray.forEach((p, idx) => {
-          p.y -= p.speedY * (1 + pulseIntensity * 3);
+        particleArray.forEach((p) => {
+          p.y -= p.speedY * (1 + currentBassEnergy * 4);
           if (p.y < 0) p.y = canvas.height;
 
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * (1 + pulseIntensity * 2), 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, p.size * (1 + currentBassEnergy * 2.5), 0, Math.PI * 2);
           ctx.fillStyle = getThemeColor(theme, 0.8);
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = getThemeColor(theme, 1);
           ctx.fill();
+          ctx.shadowBlur = 0;
         });
       }
       else if (mode === 'cyber_mask') {
         ctx.save();
         ctx.translate(centerX, centerY);
-        ctx.scale(1 + pulseIntensity * 0.25 * zoomFactor, 1 + pulseIntensity * 0.25 * zoomFactor);
+        const scaleVal = 1 + (currentBassEnergy * 0.3 * zoomFactor);
+        ctx.scale(scaleVal, scaleVal);
         
-        ctx.fillStyle = getThemeColor(theme, 0.85);
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = getThemeColor(theme, 1);
+        ctx.fillStyle = getThemeColor(theme, 0.9);
+        
+        // Cyber Visor Shape
         ctx.beginPath();
-        ctx.moveTo(-40, -25);
-        ctx.lineTo(40, -25);
-        ctx.lineTo(30, 35);
-        ctx.lineTo(0, 50);
-        ctx.lineTo(-30, 35);
+        ctx.moveTo(-50, -30);
+        ctx.lineTo(50, -30);
+        ctx.lineTo(40, 20);
+        ctx.lineTo(0, 45);
+        ctx.lineTo(-40, 20);
         ctx.closePath();
         ctx.fill();
 
-        // Eyes
+        // Visor Glowing Eyes
+        ctx.shadowBlur = 0;
         ctx.fillStyle = '#000000';
-        ctx.fillRect(-26, -10, 16, 7);
-        ctx.fillRect(10, -10, 16, 7);
+        ctx.fillRect(-35, -12, 25, 10);
+        ctx.fillRect(10, -12, 25, 10);
 
         ctx.restore();
       }
     }
 
+    // --- INITIALIZE APPLICATION ON LOAD ---
     window.onload = () => {
       initParticles();
       requestAnimationFrame(renderVisualizer);
     };
   </script>
-
 </body>
 </html>
